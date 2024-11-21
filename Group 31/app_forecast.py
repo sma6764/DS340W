@@ -1,47 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 from io import BytesIO
 import plotly.express as px
-from statsForecastModels import build_forecast_model
-
-
-# st.markdown("""
-#     <style>
-#         /* Adjust the container to minimize the margin */
-#         .css-1d391kg {  /* Streamlit's default container class */
-#             padding-left: 5px;
-#             padding-right: 5px;
-#         }
-        
-#         /* Adjust the columns to have a 1:2 ratio, making column1 smaller */
-#         .block-container {
-#             padding: 0 2rem;
-#         }
-
-#         /* Adjust the column width manually using flexbox */
-#         .row-widget {
-#             display: flex;
-#             justify-content: space-between;
-#         }
-        
-#         .css-1v0mbdj {
-#             flex: 1;  /* Column 1 (smaller) */
-#             margin-right: 1rem;  /* Add some spacing between columns */
-#         }
-        
-#         .css-1tptv69 {
-#             flex: 2;  /* Column 2 (larger) */
-#         }
-
-#         /* Remove unnecessary margins */
-#         .css-16q8frb {
-#             margin-left: 0px !important;
-#             margin-right: 0px !important;
-#         }
-#     </style>
-# """, unsafe_allow_html=True)
+from statsForecastModels import build_forecast_model, find_data_frequency
 
 def change_style():
     """Returns a CSS style string for modernizing tabs and horizontal radio buttons."""
@@ -121,7 +83,6 @@ def main():
 
     # Input Tab
     with tabs[1]:
-        # st.set_page_config(layout="wide")
         st.header("Upload and Configure Forecasting Parameters")
         
         # Upload CSV file
@@ -142,8 +103,6 @@ def main():
                 with col2:
                     # Visualization settings
                     st.subheader("Data Visualization")
-
-                    
                     # Filter data and plot
                     temp = df[df['unique_id'] == selected_id]
                     temp.sort_values('ds',inplace=True)
@@ -156,14 +115,21 @@ def main():
             data_frequency   = st.sidebar.selectbox("Select Data Frequency", ["Daily", "Weekly", "Monthly"])
             date_formate     = st.sidebar.selectbox("Select Date Format",    ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY/MM/DD', 'DD-MM-YYYY', 'MM-DD-YYYY', 'YYYY-MM-DD'])
             default_metric   = st.sidebar.selectbox("Select Performance Metrics", ['rmse', 'mape'], index=1)
-
-            dmap = {"Daily":"D", "Weekly":"W", "Monthly":"M"}
-            data_frequency = dmap[data_frequency]
-
+            STATS_MDL = ["AutoARIMA", "AutoETS", "AutoCES","AutoTheta","AutoRegressive","SeasonalExponentialSmoothingOptimized","Holt","HoltWinters","SeasonalNaive","SeasonalWindowAverage","RandomWalkWithDrift"]
+            selected_models = st.sidebar.multiselect(
+                            "Select Models for Forecasting:",
+                            options=STATS_MDL,
+                            default=STATS_MDL 
+                        )
+            # placeholder to include models selction filter
+            dmap = {"Daily":1, "Weekly":7, "Monthly":12}
+            seasonal_length = dmap[data_frequency]
+            data_frequency  = find_data_frequency(df, date_formate, seasonal_length)
+            print('**'*1000,data_frequency, seasonal_length)
             # Forecasting button
             if st.sidebar.button("Get Forecast"):
                 with st.spinner('Generating forecast...'):
-                    df_pred, df_performance, df_crossval, df_rank = build_forecast_model(df=df, model_type='statistical', date_format=date_formate, data_frequency=data_frequency, seasonal_length=12, forecast_horizon=forecast_horizon, ignore_neg_fcsts=False, error_metric=default_metric)
+                    df_pred, df_performance, df_crossval, df_rank = build_forecast_model(df=df, model_type='statistical', date_format=date_formate, data_frequency=data_frequency, seasonal_length=seasonal_length, forecast_horizon=forecast_horizon, ignore_neg_fcsts=False, error_metric=default_metric)
                 
                 st.sidebar.markdown(
                             """
@@ -182,10 +148,6 @@ def main():
                     st.session_state['forecast_perform'] = df_performance.round()
                 else:
                     st.session_state['forecast_perform'] = df_performance.round(4)
-
-
-
-
 
     # Results Tab
     with tabs[2]:
@@ -223,9 +185,6 @@ def main():
             st.write("Please generate forecasts to view performance metrics.")
 
 
-
-
-
 def visualize_forecasts(forecast_results, df):
     """
     Display line plots of historical and forecasted values for multiple models.
@@ -233,13 +192,9 @@ def visualize_forecasts(forecast_results, df):
     df: DataFrame containing historical data with 'ds' and 'y'
     forecast_results: DataFrame containing forecasted data with 'ds' and columns for model forecasts
     """
-    
-    # Display first few rows of forecast_results to understand its structure
-    # st.write(forecast_results.head())
-    
-    # Models to visualize from forecast_results (replace with your actual models)
-    models = ['AutoARIMA', 'AutoETS', 'AutoCES', 'AutoTheta', 'AutoRegressive', 'SeasonalExponentialSmoothingOptimized', 'HoltWinters', 'SeasonalNaive', 'SeasonalWindowAverage', 'RandomWalkWithDrift', 'Naive', 'stats_ensemble']
-
+    models = forecast_results.columns.tolist()
+    models.remove('unique_id')
+    models.remove('ds')
     for model in models:
         st.write(f"Forecast Plot for {model}")
         
